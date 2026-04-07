@@ -84,7 +84,7 @@ export default function HomePage() {
                 href="/login"
                 className="block w-full rounded-3xl bg-red-600 px-4 py-3 text-center font-semibold text-white"
               >
-                Entrar com telefone
+                Entrar com e-mail e senha
               </a>
 
               <a
@@ -92,6 +92,13 @@ export default function HomePage() {
                 className="block w-full rounded-3xl border border-neutral-200 bg-white px-4 py-3 text-center font-semibold text-neutral-900"
               >
                 Criar cadastro
+              </a>
+
+              <a
+                href="/prestador/cadastro"
+                className="block w-full rounded-3xl border border-amber-200 bg-amber-50 px-4 py-3 text-center font-semibold text-amber-800"
+              >
+                Quero ser um prestador
               </a>
             </>
           )}
