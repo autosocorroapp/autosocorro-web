@@ -19,9 +19,15 @@ export default function CadastroPage() {
         return;
       }
 
-      const { data, error } = await supabase.auth.signUp({
+      const { error } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          data: {
+            full_name: fullName,
+            phone: phone || null,
+          },
+        },
       });
 
       if (error) {
@@ -29,32 +35,9 @@ export default function CadastroPage() {
         return;
       }
 
-      const user = data.user;
-
-      if (!user) {
-        alert("Conta criada. Verifique seu e-mail para confirmação.");
-        return;
-      }
-
-      const { error: profileError } = await supabase.from("profiles").insert({
-        id: user.id,
-        user_type: "customer",
-        full_name: fullName,
-        phone: phone || null,
-        whatsapp: phone || null,
-      });
-
-      if (profileError) {
-        alert(profileError.message);
-        return;
-      }
-
-      alert("Conta criada com sucesso.");
-      setFullName("");
-      setPhone("");
-      setEmail("");
-      setPassword("");
-    } catch (err) {
+      alert("Conta criada com sucesso. Agora faça login.");
+      window.location.href = "/login";
+    } catch (error) {
       alert("Erro ao criar conta.");
     } finally {
       setLoading(false);
