@@ -1,120 +1,114 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ArrowLeft, ShieldCheck } from "lucide-react";
+import { FormEvent, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
-function normalizeEmail(value: string) {
-  return value.trim().toLowerCase();
-}
-
-function isValidEmail(value: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(value));
-}
-
 export default function LoginPage() {
+  const router = useRouter();
+
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [senha, setSenha] = useState("");
+
   const [loading, setLoading] = useState(false);
+  const [erro, setErro] = useState("");
 
-  const emailIsValid = useMemo(() => isValidEmail(email), [email]);
+  async function handleLogin(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
 
-  async function handleLogin() {
-    if (!emailIsValid || password.length < 6) return;
+    setErro("");
+
+    if (!email.trim()) {
+      setErro("Informe seu e-mail.");
+      return;
+    }
+
+    if (!senha.trim()) {
+      setErro("Informe sua senha.");
+      return;
+    }
 
     try {
       setLoading(true);
 
-      const normalizedEmail = normalizeEmail(email);
-
       const { error } = await supabase.auth.signInWithPassword({
-        email: normalizedEmail,
-        password,
+        email: email.trim(),
+        password: senha,
       });
 
       if (error) {
-        alert(error.message);
+        setErro(
+          "Não foi possível entrar. Verifique e-mail, senha e se sua conta já foi confirmada por e-mail."
+        );
         return;
       }
 
-      const { data: authData } = await supabase.auth.getUser();
-      const user = authData.user;
-
-      if (!user) {
-        alert("Usuário não encontrado.");
-        return;
-      }
-
-      const metadata = user.user_metadata || {};
-
-      await supabase.from("profiles").upsert(
-        {
-          id: user.id,
-          full_name: metadata.full_name || null,
-          cpf: metadata.cpf || null,
-          phone: metadata.phone || null,
-          whatsapp: metadata.whatsapp || metadata.phone || null,
-          email: user.email || normalizedEmail,
-          user_type: "driver",
-        },
-        { onConflict: "id" },
-      );
-
-      const { count, error: vehiclesError } = await supabase
-        .from("vehicles")
-        .select("id", { count: "exact", head: true })
-        .eq("profile_id", user.id);
-
-      if (vehiclesError) {
-        alert(vehiclesError.message);
-        return;
-      }
-
-      window.location.href = count && count > 0 ? "/" : "/veiculos";
+      router.push("/");
+      router.refresh();
     } catch {
-      alert("Erro ao fazer login.");
+      setErro("Erro inesperado ao fazer login. Tente novamente.");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <>
-      <section className="rounded-[28px] bg-white p-6 shadow-sm">
-        <a href="/" className="mb-5 inline-flex items-center gap-2 text-sm font-medium text-neutral-500">
-          <ArrowLeft size={16} />
-          Voltar
-        </a>
+    <main className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
+      <div className="w-full max-w-md bg-white rounded-xl shadow-md p-6">
+        <h1 className="text-2xl font-bold text-center mb-6">Entrar</h1>
 
-        <div className="mb-5">
-          <div className="inline-flex rounded-full bg-black px-3 py-1 text-xs font-semibold text-white">
-            Entrar
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div>
+            <label htmlFor="email" className="block text-sm font-medium mb-1">
+              E-mail
+            </label>
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="seuemail@exemplo.com"
+            />
           </div>
-          <h1 className="mt-4 text-3xl font-bold tracking-tight">Acesse sua conta</h1>
-          <p className="mt-2 text-sm text-neutral-500">Login principal com e-mail e senha.</p>
-        </div>
 
-        <div className="space-y-4">
-          <input className="w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4 text-base outline-none" placeholder="E-mail" value={email} onChange={(e) => setEmail(e.target.value)} inputMode="email" />
-          <input className="w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4 text-base outline-none" placeholder="Senha" value={password} onChange={(e) => setPassword(e.target.value)} type="password" />
+          <div>
+            <label htmlFor="senha" className="block text-sm font-medium mb-1">
+              Senha
+            </label>
+            <input
+              id="senha"
+              type="password"
+              value={senha}
+              onChange={(e) => setSenha(e.target.value)}
+              className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="******"
+            />
+          </div>
 
-          <button onClick={handleLogin} disabled={loading || !emailIsValid || password.length < 6} className="w-full rounded-2xl bg-black px-4 py-4 text-center font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">
+          {erro ? (
+            <p className="text-sm text-red-600 font-medium">{erro}</p>
+          ) : null}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-blue-600 text-white rounded-lg py-2 font-semibold hover:bg-blue-700 disabled:opacity-60"
+          >
             {loading ? "Entrando..." : "Entrar"}
           </button>
-        </div>
-      </section>
+        </form>
 
-      <section className="mt-5 rounded-[28px] bg-white p-5 shadow-sm">
-        <div className="flex items-start gap-3">
-          <div className="rounded-2xl bg-green-50 p-3 text-green-700">
-            <ShieldCheck size={18} />
-          </div>
-          <div>
-            <h2 className="font-semibold">Sem OTP / magic link</h2>
-            <p className="mt-1 text-sm text-neutral-500">Fluxo principal feito com senha.</p>
-          </div>
+        <div className="mt-4 text-sm text-center">
+          <p>
+            Não tem conta?{" "}
+            <Link href="/cadastro" className="text-blue-600 hover:underline">
+              Cadastre-se
+            </Link>
+          </p>
         </div>
-      </section>
-    </>
+      </div>
+    </main>
   );
 }
