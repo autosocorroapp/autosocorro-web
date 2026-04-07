@@ -9,7 +9,6 @@ import {
   Truck,
   Wrench,
 } from "lucide-react";
-import Logo from "@/components/logo";
 import { useUser } from "@/lib/useUser";
 import { supabase } from "@/lib/supabase";
 
@@ -50,17 +49,13 @@ export default function HomePage() {
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-md px-4 py-6">
-      <header className="mb-6">
-        <Logo />
-
-        <div className="mt-3 flex items-center gap-2 text-sm text-neutral-600">
+    <>
+      <section className="rounded-3xl bg-white p-5 shadow-sm">
+        <div className="mb-3 flex items-center gap-2 text-sm text-neutral-600">
           <MapPin size={16} />
           Itaboraí / RJ
         </div>
-      </header>
 
-      <section className="rounded-3xl bg-white p-5 shadow-sm">
         <h1 className="text-2xl font-bold">Socorro automotivo rápido</h1>
 
         <p className="mt-2 text-sm text-neutral-600">
@@ -72,9 +67,7 @@ export default function HomePage() {
           <div className="rounded-3xl border border-red-200 bg-red-50 p-4 text-left">
             <Car className="mb-3 text-red-600" />
             <div className="font-semibold">Carro</div>
-            <div className="text-sm text-neutral-500">
-              Atendimento automotivo
-            </div>
+            <div className="text-sm text-neutral-500">Atendimento automotivo</div>
           </div>
 
           <div className="rounded-3xl border border-neutral-200 bg-white p-4 text-left">
@@ -98,7 +91,7 @@ export default function HomePage() {
                 href="/cadastro"
                 className="block w-full rounded-3xl border border-neutral-200 bg-white px-4 py-3 text-center font-semibold text-neutral-900"
               >
-                Completar cadastro
+                Criar cadastro
               </a>
             </>
           )}
@@ -113,10 +106,10 @@ export default function HomePage() {
               </a>
 
               <a
-                href="/cadastro"
+                href="/veiculos"
                 className="block w-full rounded-3xl border border-neutral-200 bg-white px-4 py-3 text-center font-semibold text-neutral-900"
               >
-                Meus dados e veículos
+                Meus veículos
               </a>
 
               <button
@@ -170,6 +163,6 @@ export default function HomePage() {
           <div>• Prestadores aprovados manualmente</div>
         </div>
       </section>
-    </main>
+    </>
   );
 }
