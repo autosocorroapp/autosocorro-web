@@ -1,19 +1,32 @@
 import "./globals.css";
-import type { Metadata } from "next";
+import Logo from "@/components/logo";
 
-export const metadata: Metadata = {
+export const metadata = {
   title: "Auto Socorro",
-  description: "Socorro automotivo rápido em Itaboraí"
+  description: "Socorro automotivo rápido",
 };
 
 export default function RootLayout({
-  children
-}: Readonly<{
+  children,
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
     <html lang="pt-BR">
-      <body>{children}</body>
+      <body className="bg-neutral-100">
+
+        <main className="mx-auto min-h-screen max-w-md px-4 py-6">
+
+          {/* HEADER GLOBAL */}
+          <header className="mb-6 flex justify-center">
+            <Logo />
+          </header>
+
+          {children}
+
+        </main>
+
+      </body>
     </html>
   );
 }
