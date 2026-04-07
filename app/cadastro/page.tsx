@@ -3,31 +3,104 @@
 import { useMemo, useState } from "react";
 import { ArrowLeft, CarFront } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import {
-  formatPhoneBR,
-  isValidBrazilPhone,
-  toSupabasePhone,
-} from "@/lib/phone";
+import { formatPhoneBR, isValidBrazilPhone, toSupabasePhone } from "@/lib/phone";
+import { formatCpf, isValidCpf, normalizeCpf } from "@/lib/cpf";
+import { isValidEmail, normalizeEmail } from "@/lib/email";
 
 export default function CadastroPage() {
+  const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
-  const [token, setToken] = useState("");
-  const [step, setStep] = useState<"phone" | "token">("phone");
+  const [email, setEmail] = useState("");
+  const [cpf, setCpf] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   const phoneIsValid = useMemo(() => isValidBrazilPhone(phone), [phone]);
-  const supabasePhone = useMemo(() => toSupabasePhone(phone), [phone]);
+  const emailIsValid = useMemo(() => isValidEmail(email), [email]);
+  const cpfIsValid = useMemo(() => isValidCpf(cpf), [cpf]);
+  const passwordMatches = useMemo(
+    () => password.length >= 6 && password === confirmPassword,
+    [password, confirmPassword],
+  );
 
-  async function sendCode() {
-    if (!phoneIsValid) return;
+  async function handleRegister() {
+    if (!fullName.trim()) {
+      alert("Informe o nome completo.");
+      return;
+    }
+
+    if (!cpfIsValid) {
+      alert("CPF inválido.");
+      return;
+    }
+
+    if (!phoneIsValid) {
+      alert("Telefone inválido.");
+      return;
+    }
+
+    if (!emailIsValid) {
+      alert("E-mail inválido.");
+      return;
+    }
+
+    if (!passwordMatches) {
+      alert("Senha e confirmação devem coincidir (mínimo 6 caracteres).");
+      return;
+    }
 
     try {
       setLoading(true);
 
-      const { error } = await supabase.auth.signInWithOtp({
-        phone: supabasePhone,
+      const normalizedPhone = toSupabasePhone(phone);
+      const normalizedCpf = normalizeCpf(cpf);
+      const normalizedEmail = normalizeEmail(email);
+
+      const { data: phoneExists, error: phoneError } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("phone", normalizedPhone)
+        .limit(1);
+
+      if (phoneError) {
+        alert(phoneError.message);
+        return;
+      }
+
+      if (phoneExists && phoneExists.length > 0) {
+        alert("Telefone já cadastrado.");
+        return;
+      }
+
+      const { data: cpfExists, error: cpfError } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("cpf", normalizedCpf)
+        .limit(1);
+
+      if (cpfError) {
+        alert(cpfError.message);
+        return;
+      }
+
+      if (cpfExists && cpfExists.length > 0) {
+        alert("CPF já cadastrado.");
+        return;
+      }
+
+      const { data, error } = await supabase.auth.signUp({
+        email: normalizedEmail,
+        password,
         options: {
-          shouldCreateUser: true,
+          data: {
+            full_name: fullName.trim(),
+            cpf: normalizedCpf,
+            phone: normalizedPhone,
+            whatsapp: normalizedPhone,
+            email: normalizedEmail,
+            user_type: "driver",
+          },
         },
       });
 
@@ -36,45 +109,33 @@ export default function CadastroPage() {
         return;
       }
 
-      setStep("token");
-      alert("Código enviado.");
-    } catch {
-      alert("Erro ao enviar código.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function verifyCode() {
-    try {
-      setLoading(true);
-
-      const { error } = await supabase.auth.verifyOtp({
-        phone: supabasePhone,
-        token: token.trim(),
-        type: "sms",
-      });
-
-      if (error) {
-        alert(error.message);
+      if (!data.user) {
+        alert("Não foi possível criar usuário.");
         return;
       }
 
-      const { data } = await supabase.auth.getUser();
+      const { error: profileError } = await supabase.from("profiles").upsert(
+        {
+          id: data.user.id,
+          full_name: fullName.trim(),
+          cpf: normalizedCpf,
+          phone: normalizedPhone,
+          whatsapp: normalizedPhone,
+          email: normalizedEmail,
+          user_type: "driver",
+        },
+        { onConflict: "id" },
+      );
 
-      if (data.user) {
-        await supabase
-          .from("profiles")
-          .update({
-            phone: supabasePhone,
-            whatsapp: supabasePhone,
-          })
-          .eq("id", data.user.id);
+      if (profileError) {
+        alert(profileError.message);
+        return;
       }
 
-      window.location.href = "/veiculos";
+      alert("Conta criada! Verifique seu e-mail para confirmar o cadastro antes de entrar.");
+      window.location.href = "/login";
     } catch {
-      alert("Erro ao validar código.");
+      alert("Erro ao criar conta.");
     } finally {
       setLoading(false);
     }
@@ -96,92 +157,75 @@ export default function CadastroPage() {
             Primeiro acesso
           </div>
 
-          <h1 className="mt-4 text-3xl font-bold tracking-tight">
-            Crie sua conta
-          </h1>
+          <h1 className="mt-4 text-3xl font-bold tracking-tight">Crie sua conta</h1>
 
           <p className="mt-2 text-sm text-white/85">
-            Cadastre seu telefone e depois adicione um ou mais veículos.
+            Cadastro com e-mail e senha (sem OTP/magic link como fluxo principal).
           </p>
         </div>
 
-        <div className="p-6">
-          {step === "phone" && (
-            <div className="space-y-4">
-              <label className="block">
-                <span className="mb-2 block text-sm font-medium text-neutral-700">
-                  Telefone
-                </span>
+        <div className="space-y-4 p-6">
+          <input
+            className="w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4 text-base outline-none"
+            placeholder="Nome completo"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+          />
 
-                <div className="flex items-center gap-3 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4">
-                  <span className="text-xl">🇧🇷</span>
-                  <span className="text-sm font-medium text-neutral-500">
-                    +55
-                  </span>
+          <input
+            className="w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4 text-base outline-none"
+            placeholder="CPF"
+            value={cpf}
+            onChange={(e) => setCpf(formatCpf(e.target.value))}
+            inputMode="numeric"
+          />
 
-                  <input
-                    className="w-full bg-transparent text-base outline-none"
-                    placeholder="(21) 9 9999-9999"
-                    value={phone}
-                    onChange={(e) => setPhone(formatPhoneBR(e.target.value))}
-                    inputMode="numeric"
-                  />
-                </div>
-              </label>
-
-              <button
-                onClick={sendCode}
-                disabled={loading || !phoneIsValid}
-                className="w-full rounded-2xl bg-red-600 px-4 py-4 text-center font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {loading ? "Enviando..." : "Receber código"}
-              </button>
-
-              <p className="text-center text-xs text-neutral-400">
-                Você continuará o cadastro após validar o número.
-              </p>
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-neutral-700">Telefone</span>
+            <div className="flex items-center gap-3 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4">
+              <span className="text-xl">🇧🇷</span>
+              <span className="text-sm font-medium text-neutral-500">+55</span>
+              <input
+                className="w-full bg-transparent text-base outline-none"
+                placeholder="(21) 9 9999-9999"
+                value={phone}
+                onChange={(e) => setPhone(formatPhoneBR(e.target.value))}
+                inputMode="numeric"
+              />
             </div>
-          )}
+          </label>
 
-          {step === "token" && (
-            <div className="space-y-4">
-              <div className="rounded-2xl bg-neutral-50 p-4 text-sm text-neutral-600">
-                Código enviado para <span className="font-semibold">{phone}</span>
-              </div>
+          <input
+            className="w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4 text-base outline-none"
+            placeholder="E-mail"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            inputMode="email"
+          />
 
-              <label className="block">
-                <span className="mb-2 block text-sm font-medium text-neutral-700">
-                  Código de verificação
-                </span>
+          <input
+            className="w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4 text-base outline-none"
+            placeholder="Senha"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            type="password"
+          />
 
-                <input
-                  className="w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4 text-base outline-none"
-                  placeholder="Digite o código"
-                  value={token}
-                  onChange={(e) => setToken(e.target.value)}
-                  inputMode="numeric"
-                />
-              </label>
+          <input
+            className="w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4 text-base outline-none"
+            placeholder="Confirmar senha"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            type="password"
+          />
 
-              <button
-                onClick={verifyCode}
-                disabled={loading || token.trim().length < 4}
-                className="w-full rounded-2xl bg-red-600 px-4 py-4 text-center font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {loading ? "Validando..." : "Continuar cadastro"}
-              </button>
-
-              <button
-                onClick={() => {
-                  setStep("phone");
-                  setToken("");
-                }}
-                className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-4 text-center font-semibold text-neutral-900"
-              >
-                Alterar telefone
-              </button>
-            </div>
-          )}
+          <button
+            onClick={handleRegister}
+            disabled={loading || !fullName.trim() || !phoneIsValid || !emailIsValid || !cpfIsValid || !passwordMatches}
+            className="w-full rounded-2xl bg-red-600 px-4 py-4 text-center font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {loading ? "Criando conta..." : "Criar conta"}
+          </button>
         </div>
       </section>
 
@@ -192,9 +236,9 @@ export default function CadastroPage() {
           </div>
 
           <div>
-            <h2 className="font-semibold">Depois você cadastra seus veículos</h2>
+            <h2 className="font-semibold">Validação por e-mail obrigatória</h2>
             <p className="mt-1 text-sm text-neutral-500">
-              Carro, moto ou quantos veículos quiser para usar no Auto Socorro.
+              Você só consegue entrar depois de confirmar o e-mail.
             </p>
           </div>
         </div>
