@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "supabase:create-test-user": "node scripts/create-test-user.mjs"
   },
   "dependencies": {
     "@mercadopago/sdk-react": "^0.0.17",
