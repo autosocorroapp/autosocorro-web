@@ -1,7 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { ArrowLeft, ShieldCheck } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import {
+  formatPhoneBR,
+  isValidBrazilPhone,
+  toSupabasePhone,
+} from "@/lib/phone";
 
 export default function LoginPage() {
   const [phone, setPhone] = useState("");
@@ -9,16 +15,19 @@ export default function LoginPage() {
   const [step, setStep] = useState<"phone" | "token">("phone");
   const [loading, setLoading] = useState(false);
 
+  const phoneIsValid = useMemo(() => isValidBrazilPhone(phone), [phone]);
+  const supabasePhone = useMemo(() => toSupabasePhone(phone), [phone]);
+
   async function sendCode() {
+    if (!phoneIsValid) return;
+
     try {
       setLoading(true);
 
-      const cleaned = phone.trim();
-
       const { error } = await supabase.auth.signInWithOtp({
-        phone: cleaned,
+        phone: supabasePhone,
         options: {
-          shouldCreateUser: true,
+          shouldCreateUser: false,
         },
       });
 
@@ -27,8 +36,8 @@ export default function LoginPage() {
         return;
       }
 
-      alert("Código enviado.");
       setStep("token");
+      alert("Código enviado.");
     } catch {
       alert("Erro ao enviar código.");
     } finally {
@@ -41,7 +50,7 @@ export default function LoginPage() {
       setLoading(true);
 
       const { error } = await supabase.auth.verifyOtp({
-        phone: phone.trim(),
+        phone: supabasePhone,
         token: token.trim(),
         type: "sms",
       });
@@ -51,7 +60,7 @@ export default function LoginPage() {
         return;
       }
 
-      window.location.href = "/cadastro";
+      window.location.href = "/";
     } catch {
       alert("Erro ao validar código.");
     } finally {
@@ -60,50 +69,120 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-md px-4 py-6">
-      <div className="rounded-3xl bg-white p-5 shadow-sm">
-        <h1 className="text-2xl font-bold">Entrar com telefone</h1>
-        <p className="mt-2 text-sm text-neutral-600">
-          Informe seu número para receber um código de acesso.
-        </p>
+    <>
+      <section className="rounded-[28px] bg-white p-6 shadow-sm">
+        <a
+          href="/"
+          className="mb-5 inline-flex items-center gap-2 text-sm font-medium text-neutral-500"
+        >
+          <ArrowLeft size={16} />
+          Voltar
+        </a>
 
-        <div className="mt-5 space-y-3">
-          <input
-            className="w-full rounded-2xl border border-neutral-200 px-4 py-3 outline-none"
-            placeholder="+55DDDNUMERO"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            disabled={step === "token"}
-          />
+        <div className="mb-5">
+          <div className="inline-flex rounded-full bg-black px-3 py-1 text-xs font-semibold text-white">
+            Entrar
+          </div>
 
-          {step === "token" && (
-            <input
-              className="w-full rounded-2xl border border-neutral-200 px-4 py-3 outline-none"
-              placeholder="Código recebido"
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-            />
-          )}
+          <h1 className="mt-4 text-3xl font-bold tracking-tight">
+            Acesse sua conta
+          </h1>
 
-          {step === "phone" ? (
+          <p className="mt-2 text-sm text-neutral-500">
+            Entre com seu telefone para continuar no Auto Socorro.
+          </p>
+        </div>
+
+        {step === "phone" && (
+          <div className="space-y-4">
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-neutral-700">
+                Telefone
+              </span>
+
+              <div className="flex items-center gap-3 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4">
+                <span className="text-xl">🇧🇷</span>
+                <span className="text-sm font-medium text-neutral-500">+55</span>
+
+                <input
+                  className="w-full bg-transparent text-base outline-none"
+                  placeholder="(21) 9 9999-9999"
+                  value={phone}
+                  onChange={(e) => setPhone(formatPhoneBR(e.target.value))}
+                  inputMode="numeric"
+                />
+              </div>
+            </label>
+
             <button
               onClick={sendCode}
-              disabled={loading}
-              className="w-full rounded-3xl bg-red-600 px-4 py-3 font-semibold text-white disabled:opacity-60"
+              disabled={loading || !phoneIsValid}
+              className="w-full rounded-2xl bg-black px-4 py-4 text-center font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
             >
               {loading ? "Enviando..." : "Receber código"}
             </button>
-          ) : (
+
+            <p className="text-center text-xs text-neutral-400">
+              Digite um número com DDD e 9 dígitos.
+            </p>
+          </div>
+        )}
+
+        {step === "token" && (
+          <div className="space-y-4">
+            <div className="rounded-2xl bg-neutral-50 p-4 text-sm text-neutral-600">
+              Código enviado para <span className="font-semibold">{phone}</span>
+            </div>
+
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-neutral-700">
+                Código de verificação
+              </span>
+
+              <input
+                className="w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4 text-base outline-none"
+                placeholder="Digite o código"
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                inputMode="numeric"
+              />
+            </label>
+
             <button
               onClick={verifyCode}
-              disabled={loading}
-              className="w-full rounded-3xl bg-black px-4 py-3 font-semibold text-white disabled:opacity-60"
+              disabled={loading || token.trim().length < 4}
+              className="w-full rounded-2xl bg-black px-4 py-4 text-center font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
             >
-              {loading ? "Validando..." : "Validar código"}
+              {loading ? "Validando..." : "Entrar"}
             </button>
-          )}
+
+            <button
+              onClick={() => {
+                setStep("phone");
+                setToken("");
+              }}
+              className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-4 text-center font-semibold text-neutral-900"
+            >
+              Alterar telefone
+            </button>
+          </div>
+        )}
+      </section>
+
+      <section className="mt-5 rounded-[28px] bg-white p-5 shadow-sm">
+        <div className="flex items-start gap-3">
+          <div className="rounded-2xl bg-green-50 p-3 text-green-700">
+            <ShieldCheck size={18} />
+          </div>
+
+          <div>
+            <h2 className="font-semibold">Acesso rápido e seguro</h2>
+            <p className="mt-1 text-sm text-neutral-500">
+              Você entra usando apenas seu telefone, sem precisar decorar senha.
+            </p>
+          </div>
         </div>
-      </div>
-    </main>
+      </section>
+    </>
   );
 }
