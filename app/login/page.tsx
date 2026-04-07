@@ -3,29 +3,27 @@
 import { useMemo, useState } from "react";
 import { ArrowLeft, ShieldCheck } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import {
-  formatPhoneBR,
-  isValidBrazilPhone,
-  toSupabasePhone,
-} from "@/lib/phone";
+
+function isValidEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
 
 export default function LoginPage() {
-  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [token, setToken] = useState("");
-  const [step, setStep] = useState<"phone" | "token">("phone");
+  const [step, setStep] = useState<"email" | "token">("email");
   const [loading, setLoading] = useState(false);
 
-  const phoneIsValid = useMemo(() => isValidBrazilPhone(phone), [phone]);
-  const supabasePhone = useMemo(() => toSupabasePhone(phone), [phone]);
+  const emailIsValid = useMemo(() => isValidEmail(email), [email]);
 
   async function sendCode() {
-    if (!phoneIsValid) return;
+    if (!emailIsValid) return;
 
     try {
       setLoading(true);
 
       const { error } = await supabase.auth.signInWithOtp({
-        phone: supabasePhone,
+        email: email.trim().toLowerCase(),
         options: {
           shouldCreateUser: false,
         },
@@ -37,7 +35,7 @@ export default function LoginPage() {
       }
 
       setStep("token");
-      alert("Código enviado.");
+      alert("Código enviado para o e-mail.");
     } catch {
       alert("Erro ao enviar código.");
     } finally {
@@ -50,9 +48,9 @@ export default function LoginPage() {
       setLoading(true);
 
       const { error } = await supabase.auth.verifyOtp({
-        phone: supabasePhone,
+        email: email.trim().toLowerCase(),
         token: token.trim(),
-        type: "sms",
+        type: "email",
       });
 
       if (error) {
@@ -84,46 +82,37 @@ export default function LoginPage() {
             Entrar
           </div>
 
-          <h1 className="mt-4 text-3xl font-bold tracking-tight">
-            Acesse sua conta
-          </h1>
+          <h1 className="mt-4 text-3xl font-bold tracking-tight">Acesse sua conta</h1>
 
           <p className="mt-2 text-sm text-neutral-500">
-            Entre com seu telefone para continuar no Auto Socorro.
+            Entre com seu e-mail para continuar no Auto Socorro.
           </p>
         </div>
 
-        {step === "phone" && (
+        {step === "email" && (
           <div className="space-y-4">
             <label className="block">
-              <span className="mb-2 block text-sm font-medium text-neutral-700">
-                Telefone
-              </span>
+              <span className="mb-2 block text-sm font-medium text-neutral-700">E-mail</span>
 
-              <div className="flex items-center gap-3 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4">
-                <span className="text-xl">🇧🇷</span>
-                <span className="text-sm font-medium text-neutral-500">+55</span>
-
-                <input
-                  className="w-full bg-transparent text-base outline-none"
-                  placeholder="(21) 9 9999-9999"
-                  value={phone}
-                  onChange={(e) => setPhone(formatPhoneBR(e.target.value))}
-                  inputMode="numeric"
-                />
-              </div>
+              <input
+                className="w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4 text-base outline-none"
+                placeholder="seuemail@exemplo.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                inputMode="email"
+              />
             </label>
 
             <button
               onClick={sendCode}
-              disabled={loading || !phoneIsValid}
+              disabled={loading || !emailIsValid}
               className="w-full rounded-2xl bg-black px-4 py-4 text-center font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
             >
               {loading ? "Enviando..." : "Receber código"}
             </button>
 
             <p className="text-center text-xs text-neutral-400">
-              Digite um número com DDD e 9 dígitos.
+              Vamos enviar um código de acesso para seu e-mail.
             </p>
           </div>
         )}
@@ -131,7 +120,7 @@ export default function LoginPage() {
         {step === "token" && (
           <div className="space-y-4">
             <div className="rounded-2xl bg-neutral-50 p-4 text-sm text-neutral-600">
-              Código enviado para <span className="font-semibold">{phone}</span>
+              Código enviado para <span className="font-semibold">{email}</span>
             </div>
 
             <label className="block">
@@ -158,12 +147,12 @@ export default function LoginPage() {
 
             <button
               onClick={() => {
-                setStep("phone");
+                setStep("email");
                 setToken("");
               }}
               className="w-full rounded-2xl border border-neutral-200 bg-white px-4 py-4 text-center font-semibold text-neutral-900"
             >
-              Alterar telefone
+              Alterar e-mail
             </button>
           </div>
         )}
@@ -178,7 +167,7 @@ export default function LoginPage() {
           <div>
             <h2 className="font-semibold">Acesso rápido e seguro</h2>
             <p className="mt-1 text-sm text-neutral-500">
-              Você entra usando apenas seu telefone, sem precisar decorar senha.
+              Você entra usando código por e-mail, sem precisar decorar senha.
             </p>
           </div>
         </div>
