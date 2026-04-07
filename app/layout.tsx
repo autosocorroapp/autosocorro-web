@@ -13,19 +13,14 @@ export default function RootLayout({
 }) {
   return (
     <html lang="pt-BR">
-      <body className="bg-neutral-100">
-
+      <body className="bg-neutral-100 text-neutral-900">
         <main className="mx-auto min-h-screen max-w-md px-4 py-6">
-
-          {/* HEADER GLOBAL */}
-          <header className="mb-6 flex justify-center">
+          <header className="mb-6 flex justify-center border-b border-neutral-200 pb-4">
             <Logo />
           </header>
 
           {children}
-
         </main>
-
       </body>
     </html>
   );
