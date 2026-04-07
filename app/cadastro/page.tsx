@@ -1,200 +1,173 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ArrowLeft, CarFront } from "lucide-react";
+import { FormEvent, useState } from "react";
+import Link from "next/link";
 import { supabase } from "@/lib/supabase";
-import { formatPhoneBR, isValidBrazilPhone, toSupabasePhone } from "@/lib/phone";
-
-function normalizeCpf(value: string) {
-  return value.replace(/\D/g, "").slice(0, 11);
-}
-
-function formatCpf(value: string) {
-  const digits = normalizeCpf(value);
-  return digits
-    .replace(/(\d{3})(\d)/, "$1.$2")
-    .replace(/(\d{3})(\d)/, "$1.$2")
-    .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
-}
-
-function isValidCpf(cpf: string) {
-  const value = normalizeCpf(cpf);
-  if (value.length !== 11 || /^(\d)\1{10}$/.test(value)) return false;
-
-  let sum = 0;
-  for (let i = 0; i < 9; i += 1) sum += Number(value[i]) * (10 - i);
-  let digit = (sum * 10) % 11;
-  if (digit === 10) digit = 0;
-  if (digit !== Number(value[9])) return false;
-
-  sum = 0;
-  for (let i = 0; i < 10; i += 1) sum += Number(value[i]) * (11 - i);
-  digit = (sum * 10) % 11;
-  if (digit === 10) digit = 0;
-
-  return digit === Number(value[10]);
-}
-
-function normalizeEmail(value: string) {
-  return value.trim().toLowerCase();
-}
-
-function isValidEmail(value: string) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(value));
-}
 
 export default function CadastroPage() {
-  const [fullName, setFullName] = useState("");
-  const [phone, setPhone] = useState("");
+  const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
-  const [cpf, setCpf] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+  const [senha, setSenha] = useState("");
+  const [confirmarSenha, setConfirmarSenha] = useState("");
+
   const [loading, setLoading] = useState(false);
+  const [erro, setErro] = useState("");
+  const [sucesso, setSucesso] = useState("");
 
-  const phoneIsValid = useMemo(() => isValidBrazilPhone(phone), [phone]);
-  const emailIsValid = useMemo(() => isValidEmail(email), [email]);
-  const cpfIsValid = useMemo(() => isValidCpf(cpf), [cpf]);
-  const passwordMatches = useMemo(() => password.length >= 6 && password === confirmPassword, [password, confirmPassword]);
+  async function handleCadastro(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
 
-  async function handleRegister() {
-    if (!fullName.trim() || !phoneIsValid || !emailIsValid || !cpfIsValid || !passwordMatches) {
-      alert("Preencha os campos corretamente.");
+    setErro("");
+    setSucesso("");
+
+    if (!nome.trim()) {
+      setErro("Informe seu nome.");
+      return;
+    }
+
+    if (!email.trim()) {
+      setErro("Informe seu e-mail.");
+      return;
+    }
+
+    if (!senha.trim()) {
+      setErro("Informe sua senha.");
+      return;
+    }
+
+    if (senha.length < 6) {
+      setErro("A senha deve ter pelo menos 6 caracteres.");
+      return;
+    }
+
+    if (senha !== confirmarSenha) {
+      setErro("As senhas não coincidem.");
       return;
     }
 
     try {
       setLoading(true);
 
-      const normalizedPhone = toSupabasePhone(phone);
-      const normalizedCpf = normalizeCpf(cpf);
-      const normalizedEmail = normalizeEmail(email);
-
-      const { data: phoneExists } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("phone", normalizedPhone)
-        .limit(1);
-
-      if (phoneExists && phoneExists.length > 0) {
-        alert("Telefone já cadastrado.");
-        return;
-      }
-
-      const { data: cpfExists } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("cpf", normalizedCpf)
-        .limit(1);
-
-      if (cpfExists && cpfExists.length > 0) {
-        alert("CPF já cadastrado.");
-        return;
-      }
-
-      const { data, error } = await supabase.auth.signUp({
-        email: normalizedEmail,
-        password,
+      const { error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password: senha,
         options: {
           data: {
-            full_name: fullName.trim(),
-            cpf: normalizedCpf,
-            phone: normalizedPhone,
-            whatsapp: normalizedPhone,
-            email: normalizedEmail,
-            user_type: "driver",
+            nome: nome.trim(),
           },
+          emailRedirectTo: `${window.location.origin}/login`,
         },
       });
 
-      if (error || !data.user) {
-        alert(error?.message || "Não foi possível criar a conta.");
+      if (error) {
+        setErro(error.message);
         return;
       }
 
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .upsert(
-          {
-            id: data.user.id,
-            full_name: fullName.trim(),
-            cpf: normalizedCpf,
-            phone: normalizedPhone,
-            whatsapp: normalizedPhone,
-            email: normalizedEmail,
-            user_type: "driver",
-          },
-          { onConflict: "id" },
-        );
+      setSucesso(
+        "Cadastro realizado com sucesso. Verifique seu e-mail para confirmar a conta antes de fazer login."
+      );
 
-      if (profileError) {
-        alert(profileError.message);
-        return;
-      }
-
-      alert("Conta criada! Confirme seu e-mail antes de entrar.");
-      window.location.href = "/login";
+      setNome("");
+      setEmail("");
+      setSenha("");
+      setConfirmarSenha("");
     } catch {
-      alert("Erro ao criar conta.");
+      setErro("Erro inesperado ao cadastrar. Tente novamente.");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <>
-      <section className="overflow-hidden rounded-[28px] bg-white shadow-sm">
-        <div className="bg-red-600 p-6 text-white">
-          <a href="/" className="mb-5 inline-flex items-center gap-2 text-sm font-medium text-white/90">
-            <ArrowLeft size={16} />
-            Voltar
-          </a>
+    <main className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
+      <div className="w-full max-w-md bg-white rounded-xl shadow-md p-6">
+        <h1 className="text-2xl font-bold text-center mb-6">Criar conta</h1>
 
-          <div className="inline-flex rounded-full bg-white/15 px-3 py-1 text-xs font-semibold">
-            Primeiro acesso
-          </div>
-
-          <h1 className="mt-4 text-3xl font-bold tracking-tight">Crie sua conta</h1>
-
-          <p className="mt-2 text-sm text-white/85">
-            Cadastro principal com e-mail e senha.
-          </p>
-        </div>
-
-        <div className="space-y-4 p-6">
-          <input className="w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4 text-base outline-none" placeholder="Nome completo" value={fullName} onChange={(e) => setFullName(e.target.value)} />
-          <input className="w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4 text-base outline-none" placeholder="CPF" value={cpf} onChange={(e) => setCpf(formatCpf(e.target.value))} inputMode="numeric" />
-
-          <label className="block">
-            <span className="mb-2 block text-sm font-medium text-neutral-700">Telefone</span>
-            <div className="flex items-center gap-3 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4">
-              <span className="text-xl">🇧🇷</span>
-              <span className="text-sm font-medium text-neutral-500">+55</span>
-              <input className="w-full bg-transparent text-base outline-none" placeholder="(21) 9 9999-9999" value={phone} onChange={(e) => setPhone(formatPhoneBR(e.target.value))} inputMode="numeric" />
-            </div>
-          </label>
-
-          <input className="w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4 text-base outline-none" placeholder="E-mail" value={email} onChange={(e) => setEmail(e.target.value)} inputMode="email" />
-          <input className="w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4 text-base outline-none" placeholder="Senha" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-          <input className="w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4 text-base outline-none" placeholder="Confirmar senha" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
-
-          <button onClick={handleRegister} disabled={loading || !fullName.trim() || !phoneIsValid || !emailIsValid || !cpfIsValid || !passwordMatches} className="w-full rounded-2xl bg-red-600 px-4 py-4 text-center font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">
-            {loading ? "Criando conta..." : "Criar conta"}
-          </button>
-        </div>
-      </section>
-
-      <section className="mt-5 rounded-[28px] bg-white p-5 shadow-sm">
-        <div className="flex items-start gap-3">
-          <div className="rounded-2xl bg-red-50 p-3 text-red-600">
-            <CarFront size={18} />
-          </div>
+        <form onSubmit={handleCadastro} className="space-y-4">
           <div>
-            <h2 className="font-semibold">Confirmação obrigatória por e-mail</h2>
-            <p className="mt-1 text-sm text-neutral-500">Faça login apenas após validar seu e-mail.</p>
+            <label htmlFor="nome" className="block text-sm font-medium mb-1">
+              Nome
+            </label>
+            <input
+              id="nome"
+              type="text"
+              value={nome}
+              onChange={(e) => setNome(e.target.value)}
+              className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Seu nome"
+            />
           </div>
-        </div>
-      </section>
-    </>
+
+          <div>
+            <label htmlFor="email" className="block text-sm font-medium mb-1">
+              E-mail
+            </label>
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="seuemail@exemplo.com"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="senha" className="block text-sm font-medium mb-1">
+              Senha
+            </label>
+            <input
+              id="senha"
+              type="password"
+              value={senha}
+              onChange={(e) => setSenha(e.target.value)}
+              className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="******"
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="confirmarSenha"
+              className="block text-sm font-medium mb-1"
+            >
+              Confirmar senha
+            </label>
+            <input
+              id="confirmarSenha"
+              type="password"
+              value={confirmarSenha}
+              onChange={(e) => setConfirmarSenha(e.target.value)}
+              className="w-full border rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="******"
+            />
+          </div>
+
+          {erro ? (
+            <p className="text-sm text-red-600 font-medium">{erro}</p>
+          ) : null}
+
+          {sucesso ? (
+            <p className="text-sm text-green-600 font-medium">{sucesso}</p>
+          ) : null}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-blue-600 text-white rounded-lg py-2 font-semibold hover:bg-blue-700 disabled:opacity-60"
+          >
+            {loading ? "Cadastrando..." : "Cadastrar"}
+          </button>
+        </form>
+
+        <p className="text-sm text-center mt-4">
+          Já tem conta?{" "}
+          <Link href="/login" className="text-blue-600 hover:underline">
+            Entrar
+          </Link>
+        </p>
+      </div>
+    </main>
   );
 }
