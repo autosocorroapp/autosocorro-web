@@ -70,6 +70,7 @@ export default function CadastroPage() {
 
   const [loading, setLoading] = useState(false);
   const [checkingCpf, setCheckingCpf] = useState(false);
+  const [checkingFinalStep, setCheckingFinalStep] = useState(false);
   const [cpfJaCadastrado, setCpfJaCadastrado] = useState(false);
 
   const [erro, setErro] = useState("");
@@ -138,7 +139,7 @@ export default function CadastroPage() {
     try {
       setCheckingCpf(true);
 
-      const response = await fetch("/api/account/check-cpf", {
+      const response = await fetch("/api/account/check-availability", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -147,12 +148,42 @@ export default function CadastroPage() {
       });
 
       const result = await response.json();
-
-      return !!result?.exists;
+      return !!result?.exists?.cpf;
     } catch {
       return false;
     } finally {
       setCheckingCpf(false);
+    }
+  }
+
+  async function checkFinalStepConflicts() {
+    try {
+      setCheckingFinalStep(true);
+
+      const response = await fetch("/api/account/check-availability", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          phone: telefone.replace(/\D/g, ""),
+        }),
+      });
+
+      const result = await response.json();
+
+      return {
+        email: !!result?.exists?.email,
+        phone: !!result?.exists?.phone,
+      };
+    } catch {
+      return {
+        email: false,
+        phone: false,
+      };
+    } finally {
+      setCheckingFinalStep(false);
     }
   }
 
@@ -275,6 +306,18 @@ export default function CadastroPage() {
 
     if (!validateStep3()) return;
 
+    const conflicts = await checkFinalStepConflicts();
+
+    if (conflicts.email) {
+      setErro("Já existe uma conta cadastrada com este e-mail.");
+      return;
+    }
+
+    if (conflicts.phone) {
+      setErro("Já existe uma conta cadastrada com este telefone.");
+      return;
+    }
+
     const cpfLimpo = cpf.replace(/\D/g, "");
     const telefoneLimpo = telefone.replace(/\D/g, "");
 
@@ -291,7 +334,7 @@ export default function CadastroPage() {
       setLoading(true);
 
       const { error } = await supabase.auth.signUp({
-        email: email.trim(),
+        email: email.trim().toLowerCase(),
         password: senha,
         options: {
           data: {
@@ -580,10 +623,10 @@ export default function CadastroPage() {
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || checkingFinalStep}
                 className="h-16 w-full rounded-2xl bg-red-600 text-lg font-bold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {loading ? "Finalizando cadastro..." : "Finalizar cadastro"}
+                {loading || checkingFinalStep ? "Finalizando cadastro..." : "Finalizar cadastro"}
               </button>
             </form>
           )}
