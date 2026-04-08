@@ -21,7 +21,7 @@ function formatCpf(value: string) {
 
 function isCpfLike(value: string) {
   const digits = onlyDigits(value);
-  return digits.length > 0 && /^\d{1,11}$/.test(digits) && digits.length >= 3;
+  return digits.length >= 3 && !value.includes("@");
 }
 
 async function syncVehiclesFromMetadata() {
@@ -126,6 +126,20 @@ export default function LoginPage() {
 
   const cpfMode = isCpfLike(identifier);
 
+  function handleIdentifierChange(value: string) {
+    if (value.includes("@")) {
+      setIdentifier(value);
+      return;
+    }
+
+    if (/^\d/.test(value) || isCpfLike(value)) {
+      setIdentifier(formatCpf(value));
+      return;
+    }
+
+    setIdentifier(value);
+  }
+
   async function handleLogin(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
@@ -194,20 +208,6 @@ export default function LoginPage() {
     }
   }
 
-  function handleIdentifierChange(value: string) {
-    if (value.includes("@")) {
-      setIdentifier(value);
-      return;
-    }
-
-    if (isCpfLike(value) || /^\d/.test(value)) {
-      setIdentifier(formatCpf(value));
-      return;
-    }
-
-    setIdentifier(value);
-  }
-
   return (
     <main className="min-h-screen bg-[#f5f5f7] px-4 py-6">
       <div className="mx-auto w-full max-w-md">
@@ -241,7 +241,7 @@ export default function LoginPage() {
 
           <form onSubmit={handleLogin} className="mt-8 space-y-4">
             <input
-              type={cpfMode ? "text" : "text"}
+              type="text"
               inputMode={cpfMode ? "numeric" : "email"}
               value={identifier}
               onChange={(e) => handleIdentifierChange(e.target.value)}
