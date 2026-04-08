@@ -29,6 +29,10 @@ export default function CadastroPage() {
   const [erro, setErro] = useState("");
   const [sucesso, setSucesso] = useState("");
 
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
+    "https://autosocorro.online";
+
   async function handleCadastro(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
@@ -84,7 +88,7 @@ export default function CadastroPage() {
             cpf: cpfLimpo,
             user_type: "customer",
           },
-          emailRedirectTo: `${window.location.origin}/login`,
+          emailRedirectTo: `${appUrl}/login`,
         },
       });
 
@@ -118,7 +122,7 @@ export default function CadastroPage() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}`,
+          redirectTo: `${appUrl}/login`,
         },
       });
 
@@ -163,12 +167,7 @@ export default function CadastroPage() {
             disabled={loadingGoogle}
             className="mt-6 flex h-14 w-full items-center justify-center gap-3 rounded-2xl border border-zinc-200 bg-white text-base font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 48 48"
-              aria-hidden="true"
-            >
+            <svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true">
               <path
                 fill="#FFC107"
                 d="M43.611 20.083H42V20H24v8h11.303C33.654 32.657 29.243 36 24 36c-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.27 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.651-.389-3.917Z"
