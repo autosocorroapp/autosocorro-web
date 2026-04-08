@@ -135,8 +135,6 @@ export default function CadastroPage() {
   return (
     <main className="min-h-screen bg-[#f5f5f7] px-4 py-6">
       <div className="mx-auto w-full max-w-md">
-        <div className="mb-6 h-px w-full bg-zinc-200" />
-
         <div className="rounded-[32px] bg-white px-6 py-7 shadow-[0_8px_30px_rgba(0,0,0,0.08)]">
           <button
             type="button"
