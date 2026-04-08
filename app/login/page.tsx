@@ -15,6 +15,13 @@ type OnboardingVehicle = {
   color: string;
 };
 
+type PendingGoogleSignupData = {
+  full_name: string;
+  cpf: string;
+  phone: string;
+  onboarding_vehicles: OnboardingVehicle[];
+};
+
 async function syncVehiclesFromMetadata() {
   const {
     data: { user },
@@ -70,9 +77,11 @@ export default function LoginPage() {
   const [erro, setErro] = useState("");
 
   useEffect(() => {
-    const pendingGoogleData = sessionStorage.getItem("autosocorro_pre_google_signup");
+    const rawPendingGoogleData = sessionStorage.getItem("autosocorro_pre_google_signup");
 
-    if (!pendingGoogleData) return;
+    if (!rawPendingGoogleData) return;
+
+    const pendingGoogleData = rawPendingGoogleData;
 
     async function persistGoogleExtraData() {
       try {
@@ -82,7 +91,7 @@ export default function LoginPage() {
 
         if (!user) return;
 
-        const parsed = JSON.parse(pendingGoogleData);
+        const parsed = JSON.parse(pendingGoogleData) as PendingGoogleSignupData;
 
         await supabase.auth.updateUser({
           data: {
@@ -99,7 +108,7 @@ export default function LoginPage() {
 
         sessionStorage.removeItem("autosocorro_pre_google_signup");
       } catch {
-        // silencioso para não travar tela
+        // silencioso para não travar a tela
       }
     }
 
