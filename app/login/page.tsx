@@ -67,6 +67,34 @@ async function syncVehiclesFromMetadata() {
   }
 }
 
+async function syncProfileFromMetadata() {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return;
+
+  const cpf = String(user.user_metadata?.cpf || "").replace(/\D/g, "");
+  const phone = String(user.user_metadata?.phone || "").replace(/\D/g, "");
+  const fullName = String(user.user_metadata?.full_name || "");
+
+  const { error } = await supabase.from("profiles").upsert(
+    {
+      user_id: user.id,
+      full_name: fullName || null,
+      cpf: cpf || null,
+      phone: phone || null,
+    },
+    {
+      onConflict: "user_id",
+    }
+  );
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
 export default function LoginPage() {
   const router = useRouter();
 
@@ -104,6 +132,7 @@ export default function LoginPage() {
           },
         });
 
+        await syncProfileFromMetadata();
         await syncVehiclesFromMetadata();
 
         sessionStorage.removeItem("autosocorro_pre_google_signup");
@@ -145,6 +174,7 @@ export default function LoginPage() {
         return;
       }
 
+      await syncProfileFromMetadata();
       await syncVehiclesFromMetadata();
 
       router.push("/");
@@ -258,6 +288,13 @@ export default function LoginPage() {
               {loading ? "Entrando..." : "Entrar agora"}
             </button>
           </form>
+
+          <Link
+            href="/recuperar-senha"
+            className="mt-4 block text-center text-sm font-semibold text-red-600 transition hover:text-red-700"
+          >
+            Esqueci minha senha
+          </Link>
 
           <p className="mt-6 text-center text-base text-zinc-600">
             Não tem conta?{" "}
