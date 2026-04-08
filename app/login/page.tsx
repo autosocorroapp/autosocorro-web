@@ -1,26 +1,28 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
-type OnboardingVehicle = {
-  kind: "carro" | "moto";
-  plate: string;
-  brand: string;
-  model: string;
-  year: number;
-  color: string;
-};
+function onlyDigits(value: string) {
+  return value.replace(/\D/g, "");
+}
 
-type PendingGoogleSignupData = {
-  full_name: string;
-  cpf: string;
-  phone: string;
-  onboarding_vehicles: OnboardingVehicle[];
-};
+function formatCpf(value: string) {
+  const onlyNumbers = onlyDigits(value).slice(0, 11);
+
+  return onlyNumbers
+    .replace(/^(\d{3})(\d)/, "$1.$2")
+    .replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3")
+    .replace(/\.(\d{3})(\d)/, ".$1-$2");
+}
+
+function isCpfLike(value: string) {
+  const digits = onlyDigits(value);
+  return digits.length > 0 && /^\d{1,11}$/.test(digits) && digits.length >= 3;
+}
 
 async function syncVehiclesFromMetadata() {
   const {
@@ -29,9 +31,11 @@ async function syncVehiclesFromMetadata() {
 
   if (!user) return;
 
-  const metadataVehicles = (user.user_metadata?.onboarding_vehicles || []) as OnboardingVehicle[];
+  const metadataVehicles = Array.isArray(user.user_metadata?.onboarding_vehicles)
+    ? user.user_metadata.onboarding_vehicles
+    : [];
 
-  if (!Array.isArray(metadataVehicles) || metadataVehicles.length === 0) return;
+  if (metadataVehicles.length === 0) return;
 
   const { data: existingVehicles, error: existingError } = await supabase
     .from("vehicles")
@@ -47,16 +51,28 @@ async function syncVehiclesFromMetadata() {
   );
 
   const vehiclesToInsert = metadataVehicles
-    .filter((vehicle) => !existingPlateSet.has(vehicle.plate.toUpperCase()))
-    .map((vehicle) => ({
-      user_id: user.id,
-      kind: vehicle.kind,
-      plate: vehicle.plate.toUpperCase(),
-      brand: vehicle.brand,
-      model: vehicle.model,
-      year: vehicle.year,
-      color: vehicle.color,
-    }));
+    .filter(
+      (vehicle: { plate: string }) =>
+        !existingPlateSet.has(String(vehicle.plate).toUpperCase())
+    )
+    .map(
+      (vehicle: {
+        kind: "carro" | "moto";
+        plate: string;
+        brand: string;
+        model: string;
+        year: number;
+        color: string;
+      }) => ({
+        user_id: user.id,
+        kind: vehicle.kind,
+        plate: vehicle.plate.toUpperCase(),
+        brand: vehicle.brand,
+        model: vehicle.model,
+        year: vehicle.year,
+        color: vehicle.color,
+      })
+    );
 
   if (vehiclesToInsert.length > 0) {
     const { error: insertError } = await supabase.from("vehicles").insert(vehiclesToInsert);
@@ -77,16 +93,21 @@ async function syncProfileFromMetadata() {
   const cpf = String(user.user_metadata?.cpf || "").replace(/\D/g, "");
   const phone = String(user.user_metadata?.phone || "").replace(/\D/g, "");
   const fullName = String(user.user_metadata?.full_name || "");
+  const email = String(user.email || "").toLowerCase();
 
   const { error } = await supabase.from("profiles").upsert(
     {
+      id: user.id,
       user_id: user.id,
       full_name: fullName || null,
       cpf: cpf || null,
       phone: phone || null,
+      email: email || null,
+      role: "customer",
+      is_active: true,
     },
     {
-      onConflict: "user_id",
+      onConflict: "id",
     }
   );
 
@@ -98,59 +119,20 @@ async function syncProfileFromMetadata() {
 export default function LoginPage() {
   const router = useRouter();
 
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [senha, setSenha] = useState("");
   const [loading, setLoading] = useState(false);
-  const [loadingGoogle, setLoadingGoogle] = useState(false);
   const [erro, setErro] = useState("");
 
-  useEffect(() => {
-    const rawPendingGoogleData = sessionStorage.getItem("autosocorro_pre_google_signup");
-
-    if (!rawPendingGoogleData) return;
-
-    const pendingGoogleData = rawPendingGoogleData;
-
-    async function persistGoogleExtraData() {
-      try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-
-        if (!user) return;
-
-        const parsed = JSON.parse(pendingGoogleData) as PendingGoogleSignupData;
-
-        await supabase.auth.updateUser({
-          data: {
-            ...user.user_metadata,
-            full_name: parsed.full_name,
-            cpf: parsed.cpf,
-            phone: parsed.phone,
-            onboarding_vehicles: parsed.onboarding_vehicles,
-            user_type: "customer",
-          },
-        });
-
-        await syncProfileFromMetadata();
-        await syncVehiclesFromMetadata();
-
-        sessionStorage.removeItem("autosocorro_pre_google_signup");
-      } catch {
-        // silencioso para não travar a tela
-      }
-    }
-
-    persistGoogleExtraData();
-  }, []);
+  const cpfMode = isCpfLike(identifier);
 
   async function handleLogin(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
     setErro("");
 
-    if (!email.trim()) {
-      setErro("Informe seu e-mail.");
+    if (!identifier.trim()) {
+      setErro("Informe seu e-mail ou CPF.");
       return;
     }
 
@@ -162,14 +144,35 @@ export default function LoginPage() {
     try {
       setLoading(true);
 
+      let emailToLogin = identifier.trim().toLowerCase();
+
+      if (!identifier.includes("@")) {
+        const response = await fetch("/api/account/resolve-login", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ identifier }),
+        });
+
+        const result = await response.json();
+
+        if (!response.ok || !result?.email) {
+          setErro("Não foi possível localizar uma conta com este CPF.");
+          return;
+        }
+
+        emailToLogin = String(result.email).toLowerCase();
+      }
+
       const { error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
+        email: emailToLogin,
         password: senha,
       });
 
       if (error) {
         setErro(
-          "Não foi possível entrar. Verifique e-mail, senha e se sua conta já foi confirmada por e-mail."
+          "Não foi possível entrar. Verifique seus dados e se sua conta já foi confirmada por e-mail."
         );
         return;
       }
@@ -191,30 +194,18 @@ export default function LoginPage() {
     }
   }
 
-  async function handleGoogleLogin() {
-    try {
-      setErro("");
-      setLoadingGoogle(true);
-
-      const appUrl =
-        process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
-        "https://autosocorro.online";
-
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: `${appUrl}/login`,
-        },
-      });
-
-      if (error) {
-        setErro("Não foi possível iniciar o login com Google.");
-      }
-    } catch {
-      setErro("Erro inesperado ao iniciar o Google.");
-    } finally {
-      setLoadingGoogle(false);
+  function handleIdentifierChange(value: string) {
+    if (value.includes("@")) {
+      setIdentifier(value);
+      return;
     }
+
+    if (isCpfLike(value) || /^\d/.test(value)) {
+      setIdentifier(formatCpf(value));
+      return;
+    }
+
+    setIdentifier(value);
   }
 
   return (
@@ -239,7 +230,7 @@ export default function LoginPage() {
           </h1>
 
           <p className="mt-3 text-lg leading-7 text-zinc-600">
-            Entre com seu <strong>e-mail e senha</strong> ou use sua conta Google.
+            Entre com seu <strong>e-mail ou CPF</strong> e sua senha.
           </p>
 
           {erro ? (
@@ -248,27 +239,13 @@ export default function LoginPage() {
             </div>
           ) : null}
 
-          <button
-            type="button"
-            onClick={handleGoogleLogin}
-            disabled={loadingGoogle}
-            className="mt-6 flex h-14 w-full items-center justify-center gap-3 rounded-2xl border border-zinc-200 bg-white text-base font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {loadingGoogle ? "Abrindo Google..." : "Entrar com Google"}
-          </button>
-
-          <div className="my-6 flex items-center gap-3">
-            <div className="h-px flex-1 bg-zinc-200" />
-            <span className="text-sm text-zinc-400">ou</span>
-            <div className="h-px flex-1 bg-zinc-200" />
-          </div>
-
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleLogin} className="mt-8 space-y-4">
             <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="E-mail"
+              type={cpfMode ? "text" : "text"}
+              inputMode={cpfMode ? "numeric" : "email"}
+              value={identifier}
+              onChange={(e) => handleIdentifierChange(e.target.value)}
+              placeholder={cpfMode ? "CPF" : "E-mail ou CPF"}
               className="h-16 w-full rounded-2xl border border-zinc-200 bg-white px-5 text-lg text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-red-500 focus:ring-4 focus:ring-red-100"
             />
 
@@ -289,12 +266,21 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <Link
-            href="/recuperar-senha"
-            className="mt-4 block text-center text-sm font-semibold text-red-600 transition hover:text-red-700"
-          >
-            Esqueci minha senha
-          </Link>
+          <div className="mt-5 space-y-2 text-center">
+            <Link
+              href="/recuperar-senha"
+              className="block text-sm font-semibold text-red-600 transition hover:text-red-700"
+            >
+              Esqueci minha senha
+            </Link>
+
+            <Link
+              href="/esqueci-email"
+              className="block text-sm font-semibold text-red-600 transition hover:text-red-700"
+            >
+              Esqueci meu e-mail
+            </Link>
+          </div>
 
           <p className="mt-6 text-center text-base text-zinc-600">
             Não tem conta?{" "}
