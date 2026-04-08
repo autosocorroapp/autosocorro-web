@@ -1,280 +1,272 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { CarFront, Plus, Trash2 } from "lucide-react";
+import { FormEvent, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
-type VehicleForm = {
-  kind: "car" | "motorcycle";
+type VehicleKind = "carro" | "moto";
+
+type Vehicle = {
+  id: string;
+  kind: VehicleKind;
   plate: string;
   brand: string;
   model: string;
-  color: string;
-  year: string;
-};
-
-const emptyVehicle: VehicleForm = {
-  kind: "car",
-  plate: "",
-  brand: "",
-  model: "",
-  color: "",
-  year: "",
+  year: number | null;
+  color: string | null;
 };
 
 export default function VeiculosPage() {
+  const [kind, setKind] = useState<VehicleKind>("carro");
+  const [plate, setPlate] = useState("");
+  const [brand, setBrand] = useState("");
+  const [model, setModel] = useState("");
+  const [year, setYear] = useState("");
+  const [color, setColor] = useState("");
+
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(false);
-  const [profileLoading, setProfileLoading] = useState(true);
-  const [fullName, setFullName] = useState("");
-  const [vehicles, setVehicles] = useState<VehicleForm[]>([{ ...emptyVehicle }]);
+  const [loadingList, setLoadingList] = useState(true);
+  const [erro, setErro] = useState("");
+  const [sucesso, setSucesso] = useState("");
 
-  useEffect(() => {
-    async function loadData() {
-      const { data: authData } = await supabase.auth.getUser();
+  async function loadVehicles() {
+    try {
+      setLoadingList(true);
+      setErro("");
 
-      if (!authData.user) {
-        window.location.href = "/login";
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        setErro("Usuário não autenticado.");
         return;
       }
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("full_name")
-        .eq("id", authData.user.id)
-        .single();
-
-      if (profile?.full_name) setFullName(profile.full_name);
-
-      const { data: userVehicles } = await supabase
+      const { data, error } = await supabase
         .from("vehicles")
-        .select("kind, plate, brand, model, color, year")
-        .eq("profile_id", authData.user.id)
-        .order("created_at", { ascending: true });
+        .select("id, kind, plate, brand, model, year, color")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
 
-      if (userVehicles && userVehicles.length > 0) {
-        setVehicles(
-          userVehicles.map((v) => ({
-            kind: v.kind === "motorcycle" ? "motorcycle" : "car",
-            plate: v.plate || "",
-            brand: v.brand || "",
-            model: v.model || "",
-            color: v.color || "",
-            year: v.year || "",
-          }))
-        );
+      if (error) {
+        setErro(error.message);
+        return;
       }
 
-      setProfileLoading(false);
+      setVehicles((data as Vehicle[]) || []);
+    } catch {
+      setErro("Erro ao carregar veículos.");
+    } finally {
+      setLoadingList(false);
     }
+  }
 
-    loadData();
+  useEffect(() => {
+    loadVehicles();
   }, []);
 
-  function updateVehicle(index: number, field: keyof VehicleForm, value: string) {
-    setVehicles((prev) =>
-      prev.map((vehicle, i) =>
-        i === index ? { ...vehicle, [field]: value } : vehicle
-      )
-    );
-  }
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
 
-  function addVehicle() {
-    setVehicles((prev) => [...prev, { ...emptyVehicle }]);
-  }
+    setErro("");
+    setSucesso("");
 
-  function removeVehicle(index: number) {
-    setVehicles((prev) => prev.filter((_, i) => i !== index));
-  }
+    if (!plate.trim()) {
+      setErro("Informe a placa.");
+      return;
+    }
 
-  async function handleSave() {
+    if (!brand.trim()) {
+      setErro("Informe a marca.");
+      return;
+    }
+
+    if (!model.trim()) {
+      setErro("Informe o modelo.");
+      return;
+    }
+
+    if (!year.trim()) {
+      setErro("Informe o ano.");
+      return;
+    }
+
+    if (!color.trim()) {
+      setErro("Informe a cor.");
+      return;
+    }
+
     try {
       setLoading(true);
 
-      const { data: authData } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-      if (!authData.user) {
-        window.location.href = "/login";
+      if (!user) {
+        setErro("Usuário não autenticado.");
         return;
       }
 
-      if (!fullName.trim()) {
-        alert("Preencha seu nome.");
+      const { error } = await supabase.from("vehicles").insert([
+        {
+          user_id: user.id,
+          kind,
+          plate: plate.trim().toUpperCase(),
+          brand: brand.trim(),
+          model: model.trim(),
+          year: Number(year),
+          color: color.trim(),
+        },
+      ]);
+
+      if (error) {
+        setErro(error.message);
         return;
       }
 
-      const validVehicles = vehicles.filter(
-        (v) => v.plate.trim() || v.model.trim() || v.brand.trim()
-      );
+      setSucesso("Veículo cadastrado com sucesso.");
+      setKind("carro");
+      setPlate("");
+      setBrand("");
+      setModel("");
+      setYear("");
+      setColor("");
 
-      if (validVehicles.length === 0) {
-        alert("Cadastre pelo menos um veículo.");
-        return;
-      }
-
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .update({ full_name: fullName.trim() })
-        .eq("id", authData.user.id);
-
-      if (profileError) {
-        alert(profileError.message);
-        return;
-      }
-
-      const { error: deleteError } = await supabase
-        .from("vehicles")
-        .delete()
-        .eq("profile_id", authData.user.id);
-
-      if (deleteError) {
-        alert(deleteError.message);
-        return;
-      }
-
-      const payload = validVehicles.map((vehicle) => ({
-        profile_id: authData.user.id,
-        kind: vehicle.kind,
-        plate: vehicle.plate.trim().toUpperCase(),
-        brand: vehicle.brand.trim() || null,
-        model: vehicle.model.trim() || null,
-        color: vehicle.color.trim() || null,
-        year: vehicle.year.trim() || null,
-      }));
-
-      const { error: vehiclesError } = await supabase
-        .from("vehicles")
-        .insert(payload);
-
-      if (vehiclesError) {
-        alert(vehiclesError.message);
-        return;
-      }
-
-      window.location.href = "/";
+      await loadVehicles();
     } catch {
-      alert("Erro ao salvar veículos.");
+      setErro("Erro inesperado ao cadastrar veículo.");
     } finally {
       setLoading(false);
     }
   }
 
-  if (profileLoading) {
-    return (
-      <section className="rounded-[28px] bg-white p-5 shadow-sm">
-        Carregando...
-      </section>
-    );
-  }
-
   return (
-    <>
-      <section className="rounded-[28px] bg-white p-5 shadow-sm">
-        <div className="flex items-start gap-3">
-          <div className="rounded-2xl bg-red-50 p-3 text-red-600">
-            <CarFront size={18} />
+    <main className="min-h-screen bg-[#f5f5f7] px-4 py-6">
+      <div className="mx-auto max-w-3xl">
+        <div className="rounded-[32px] bg-white px-6 py-7 shadow-[0_8px_30px_rgba(0,0,0,0.08)]">
+          <div className="mb-4 inline-flex rounded-full bg-red-100 px-4 py-1 text-sm font-semibold text-red-700">
+            Meus veículos
           </div>
 
-          <div>
-            <h1 className="text-2xl font-bold">Meus veículos</h1>
-            <p className="mt-1 text-sm text-neutral-500">
-              Cadastre um ou mais veículos para pedir socorro mais rápido.
-            </p>
-          </div>
-        </div>
+          <h1 className="text-3xl font-extrabold text-zinc-900">Cadastrar veículo</h1>
 
-        <div className="mt-5">
-          <input
-            className="w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4 outline-none"
-            placeholder="Seu nome completo"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-          />
-        </div>
-      </section>
-
-      <div className="mt-5 space-y-4">
-        {vehicles.map((vehicle, index) => (
-          <section key={index} className="rounded-[28px] bg-white p-5 shadow-sm">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-bold">Veículo {index + 1}</h2>
-
-              {vehicles.length > 1 && (
-                <button
-                  onClick={() => removeVehicle(index)}
-                  className="inline-flex items-center gap-2 text-sm font-semibold text-red-600"
-                >
-                  <Trash2 size={16} />
-                  Remover
-                </button>
-              )}
-            </div>
-
-            <div className="space-y-3">
-              <select
-                className="w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4 outline-none"
-                value={vehicle.kind}
-                onChange={(e) =>
-                  updateVehicle(index, "kind", e.target.value as "car" | "motorcycle")
-                }
+          <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setKind("carro")}
+                className={`h-14 rounded-2xl border text-base font-semibold transition ${
+                  kind === "carro"
+                    ? "border-red-600 bg-red-600 text-white"
+                    : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
+                }`}
               >
-                <option value="car">Carro</option>
-                <option value="motorcycle">Moto</option>
-              </select>
+                Carro
+              </button>
 
-              <input
-                className="w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4 outline-none"
-                placeholder="Placa"
-                value={vehicle.plate}
-                onChange={(e) => updateVehicle(index, "plate", e.target.value)}
-              />
-
-              <input
-                className="w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4 outline-none"
-                placeholder="Marca"
-                value={vehicle.brand}
-                onChange={(e) => updateVehicle(index, "brand", e.target.value)}
-              />
-
-              <input
-                className="w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4 outline-none"
-                placeholder="Modelo"
-                value={vehicle.model}
-                onChange={(e) => updateVehicle(index, "model", e.target.value)}
-              />
-
-              <input
-                className="w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4 outline-none"
-                placeholder="Cor"
-                value={vehicle.color}
-                onChange={(e) => updateVehicle(index, "color", e.target.value)}
-              />
-
-              <input
-                className="w-full rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4 outline-none"
-                placeholder="Ano"
-                value={vehicle.year}
-                onChange={(e) => updateVehicle(index, "year", e.target.value)}
-              />
+              <button
+                type="button"
+                onClick={() => setKind("moto")}
+                className={`h-14 rounded-2xl border text-base font-semibold transition ${
+                  kind === "moto"
+                    ? "border-red-600 bg-red-600 text-white"
+                    : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
+                }`}
+              >
+                Moto
+              </button>
             </div>
-          </section>
-        ))}
 
-        <button
-          onClick={addVehicle}
-          className="flex w-full items-center justify-center gap-2 rounded-2xl border border-neutral-200 bg-white px-4 py-4 text-center font-semibold text-neutral-900"
-        >
-          <Plus size={18} />
-          Adicionar outro veículo
-        </button>
+            <input
+              type="text"
+              value={plate}
+              onChange={(e) => setPlate(e.target.value.toUpperCase())}
+              placeholder="Placa"
+              className="h-14 w-full rounded-2xl border border-zinc-200 px-4 outline-none transition focus:border-red-500 focus:ring-4 focus:ring-red-100"
+            />
 
-        <button
-          onClick={handleSave}
-          disabled={loading}
-          className="w-full rounded-2xl bg-red-600 px-4 py-4 text-center font-semibold text-white disabled:opacity-40"
-        >
-          {loading ? "Salvando..." : "Salvar veículos"}
-        </button>
+            <input
+              type="text"
+              value={brand}
+              onChange={(e) => setBrand(e.target.value)}
+              placeholder="Marca"
+              className="h-14 w-full rounded-2xl border border-zinc-200 px-4 outline-none transition focus:border-red-500 focus:ring-4 focus:ring-red-100"
+            />
+
+            <input
+              type="text"
+              value={model}
+              onChange={(e) => setModel(e.target.value)}
+              placeholder="Modelo"
+              className="h-14 w-full rounded-2xl border border-zinc-200 px-4 outline-none transition focus:border-red-500 focus:ring-4 focus:ring-red-100"
+            />
+
+            <input
+              type="number"
+              value={year}
+              onChange={(e) => setYear(e.target.value)}
+              placeholder="Ano"
+              className="h-14 w-full rounded-2xl border border-zinc-200 px-4 outline-none transition focus:border-red-500 focus:ring-4 focus:ring-red-100"
+            />
+
+            <input
+              type="text"
+              value={color}
+              onChange={(e) => setColor(e.target.value)}
+              placeholder="Cor"
+              className="h-14 w-full rounded-2xl border border-zinc-200 px-4 outline-none transition focus:border-red-500 focus:ring-4 focus:ring-red-100"
+            />
+
+            {erro ? (
+              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                {erro}
+              </div>
+            ) : null}
+
+            {sucesso ? (
+              <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-700">
+                {sucesso}
+              </div>
+            ) : null}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="h-16 w-full rounded-2xl bg-red-600 text-lg font-bold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loading ? "Salvando..." : "Adicionar veículo"}
+            </button>
+          </form>
+        </div>
+
+        <div className="mt-6 rounded-[32px] bg-white px-6 py-7 shadow-[0_8px_30px_rgba(0,0,0,0.08)]">
+          <h2 className="text-2xl font-extrabold text-zinc-900">Veículos cadastrados</h2>
+
+          {loadingList ? (
+            <p className="mt-4 text-zinc-600">Carregando...</p>
+          ) : vehicles.length === 0 ? (
+            <p className="mt-4 text-zinc-600">Nenhum veículo cadastrado.</p>
+          ) : (
+            <div className="mt-4 space-y-4">
+              {vehicles.map((vehicle) => (
+                <div key={vehicle.id} className="rounded-2xl border border-zinc-200 p-4">
+                  <p className="text-lg font-bold text-zinc-900">
+                    {vehicle.brand} {vehicle.model}
+                  </p>
+                  <p className="mt-1 text-sm text-zinc-600">
+                    Tipo: {vehicle.kind === "carro" ? "Carro" : "Moto"}
+                  </p>
+                  <p className="text-sm text-zinc-600">Placa: {vehicle.plate}</p>
+                  <p className="text-sm text-zinc-600">Ano: {vehicle.year ?? "-"}</p>
+                  <p className="text-sm text-zinc-600">Cor: {vehicle.color ?? "-"}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
-    </>
+    </main>
   );
 }
