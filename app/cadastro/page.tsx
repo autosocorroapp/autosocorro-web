@@ -70,6 +70,9 @@ export default function CadastroPage() {
 
   const [loading, setLoading] = useState(false);
   const [loadingGoogle, setLoadingGoogle] = useState(false);
+  const [checkingCpf, setCheckingCpf] = useState(false);
+  const [cpfJaCadastrado, setCpfJaCadastrado] = useState(false);
+
   const [erro, setErro] = useState("");
   const [sucesso, setSucesso] = useState("");
 
@@ -89,10 +92,7 @@ export default function CadastroPage() {
         i === index
           ? {
               ...vehicle,
-              [field]:
-                field === "plate"
-                  ? normalizePlate(value)
-                  : value,
+              [field]: field === "plate" ? normalizePlate(value) : value,
             }
           : vehicle
       )
@@ -129,6 +129,32 @@ export default function CadastroPage() {
     }
 
     return true;
+  }
+
+  async function checkCpfAlreadyExists() {
+    const cpfLimpo = cpf.replace(/\D/g, "");
+
+    if (cpfLimpo.length !== 11) return false;
+
+    try {
+      setCheckingCpf(true);
+
+      const response = await fetch("/api/account/check-cpf", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ cpf: cpfLimpo }),
+      });
+
+      const result = await response.json();
+
+      return !!result?.exists;
+    } catch {
+      return false;
+    } finally {
+      setCheckingCpf(false);
+    }
   }
 
   function validateStep2() {
@@ -205,11 +231,21 @@ export default function CadastroPage() {
     return true;
   }
 
-  function handleNext() {
+  async function handleNext() {
     setErro("");
+    setCpfJaCadastrado(false);
 
     if (step === 1) {
       if (!validateStep1()) return;
+
+      const cpfExists = await checkCpfAlreadyExists();
+
+      if (cpfExists) {
+        setCpfJaCadastrado(true);
+        setErro("Já existe uma conta cadastrada com este CPF.");
+        return;
+      }
+
       setStep(2);
       return;
     }
@@ -222,6 +258,7 @@ export default function CadastroPage() {
 
   function handleBack() {
     setErro("");
+    setCpfJaCadastrado(false);
 
     if (step === 2) {
       setStep(1);
@@ -291,6 +328,7 @@ export default function CadastroPage() {
       setSenha("");
       setConfirmarSenha("");
       setStep(1);
+      setCpfJaCadastrado(false);
     } catch {
       setErro("Erro inesperado ao cadastrar. Tente novamente.");
     } finally {
@@ -303,6 +341,15 @@ export default function CadastroPage() {
     setSucesso("");
 
     if (!validateStep1()) {
+      setStep(1);
+      return;
+    }
+
+    const cpfExists = await checkCpfAlreadyExists();
+
+    if (cpfExists) {
+      setCpfJaCadastrado(true);
+      setErro("Já existe uma conta cadastrada com este CPF.");
       setStep(1);
       return;
     }
@@ -401,6 +448,34 @@ export default function CadastroPage() {
             </div>
           ) : null}
 
+          {cpfJaCadastrado && step === 1 ? (
+            <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
+              <p className="text-sm font-semibold text-amber-800">
+                Já existe uma conta com este CPF.
+              </p>
+
+              <div className="mt-4 space-y-3">
+                <Link
+                  href="/login"
+                  className="flex h-12 w-full items-center justify-center rounded-2xl bg-red-600 text-sm font-bold text-white transition hover:bg-red-700"
+                >
+                  Ir para login
+                </Link>
+
+                <Link
+                  href="/recuperar-senha"
+                  className="flex h-12 w-full items-center justify-center rounded-2xl border border-zinc-200 bg-white text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50"
+                >
+                  Esqueci minha senha
+                </Link>
+
+                <p className="text-center text-sm text-zinc-600">
+                  Esqueceu seu e-mail? Fale com o suporte para localizar sua conta com segurança.
+                </p>
+              </div>
+            </div>
+          ) : null}
+
           {step === 1 && (
             <div className="mt-8 space-y-4">
               <input
@@ -415,7 +490,10 @@ export default function CadastroPage() {
                 type="text"
                 inputMode="numeric"
                 value={cpf}
-                onChange={(e) => setCpf(formatCpf(e.target.value))}
+                onChange={(e) => {
+                  setCpf(formatCpf(e.target.value));
+                  setCpfJaCadastrado(false);
+                }}
                 placeholder="CPF"
                 className="h-16 w-full rounded-2xl border border-zinc-200 bg-white px-5 text-lg text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-red-500 focus:ring-4 focus:ring-red-100"
               />
@@ -423,9 +501,10 @@ export default function CadastroPage() {
               <button
                 type="button"
                 onClick={handleNext}
-                className="mt-2 h-16 w-full rounded-2xl bg-red-600 text-lg font-bold text-white transition hover:bg-red-700"
+                disabled={checkingCpf}
+                className="mt-2 h-16 w-full rounded-2xl bg-red-600 text-lg font-bold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Avançar
+                {checkingCpf ? "Verificando CPF..." : "Avançar"}
               </button>
             </div>
           )}
