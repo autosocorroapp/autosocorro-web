@@ -69,7 +69,6 @@ export default function CadastroPage() {
   const [confirmarSenha, setConfirmarSenha] = useState("");
 
   const [loading, setLoading] = useState(false);
-  const [loadingGoogle, setLoadingGoogle] = useState(false);
   const [checkingCpf, setCheckingCpf] = useState(false);
   const [cpfJaCadastrado, setCpfJaCadastrado] = useState(false);
 
@@ -160,11 +159,6 @@ export default function CadastroPage() {
   function validateStep2() {
     for (let i = 0; i < vehicles.length; i++) {
       const vehicle = vehicles[i];
-
-      if (!vehicle.kind) {
-        setErro(`Selecione o tipo do veículo ${i + 1}.`);
-        return false;
-      }
 
       if (!vehicle.plate.trim()) {
         setErro(`Informe a placa do veículo ${i + 1}.`);
@@ -336,79 +330,6 @@ export default function CadastroPage() {
     }
   }
 
-  async function handleGoogleCadastro() {
-    setErro("");
-    setSucesso("");
-
-    if (!validateStep1()) {
-      setStep(1);
-      return;
-    }
-
-    const cpfExists = await checkCpfAlreadyExists();
-
-    if (cpfExists) {
-      setCpfJaCadastrado(true);
-      setErro("Já existe uma conta cadastrada com este CPF.");
-      setStep(1);
-      return;
-    }
-
-    if (!validateStep2()) {
-      setStep(2);
-      return;
-    }
-
-    if (!validateStep3()) {
-      setStep(3);
-      return;
-    }
-
-    try {
-      setLoadingGoogle(true);
-
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: `${appUrl}/login`,
-          queryParams: {
-            access_type: "offline",
-            prompt: "consent",
-          },
-        },
-      });
-
-      if (error) {
-        setErro("Não foi possível iniciar o cadastro com Google.");
-        return;
-      }
-
-      const payload = {
-        full_name: nomeCompleto.trim(),
-        cpf: cpf.replace(/\D/g, ""),
-        phone: telefone.replace(/\D/g, ""),
-        onboarding_vehicles: vehicles.map((vehicle) => ({
-          kind: vehicle.kind,
-          plate: normalizePlate(vehicle.plate),
-          brand: vehicle.brand.trim(),
-          model: vehicle.model.trim(),
-          year: Number(vehicle.year),
-          color: vehicle.color.trim(),
-        })),
-      };
-
-      sessionStorage.setItem("autosocorro_pre_google_signup", JSON.stringify(payload));
-
-      if (!data?.url) {
-        setErro("Não foi possível iniciar o Google.");
-      }
-    } catch {
-      setErro("Erro inesperado ao iniciar o Google.");
-    } finally {
-      setLoadingGoogle(false);
-    }
-  }
-
   return (
     <main className="min-h-screen bg-[#f5f5f7] px-4 py-6">
       <div className="mx-auto w-full max-w-md">
@@ -469,9 +390,12 @@ export default function CadastroPage() {
                   Esqueci minha senha
                 </Link>
 
-                <p className="text-center text-sm text-zinc-600">
-                  Esqueceu seu e-mail? Fale com o suporte para localizar sua conta com segurança.
-                </p>
+                <Link
+                  href="/esqueci-email"
+                  className="flex h-12 w-full items-center justify-center rounded-2xl border border-zinc-200 bg-white text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50"
+                >
+                  Esqueci meu e-mail
+                </Link>
               </div>
             </div>
           ) : null}
@@ -512,10 +436,7 @@ export default function CadastroPage() {
           {step === 2 && (
             <div className="mt-8 space-y-6">
               {vehicles.map((vehicle, index) => (
-                <div
-                  key={index}
-                  className="rounded-3xl border border-zinc-200 p-4"
-                >
+                <div key={index} className="rounded-3xl border border-zinc-200 p-4">
                   <div className="mb-4 flex items-center justify-between">
                     <h2 className="text-lg font-bold text-zinc-900">
                       Veículo {index + 1}
@@ -656,15 +577,6 @@ export default function CadastroPage() {
                 placeholder="Confirmar senha"
                 className="h-16 w-full rounded-2xl border border-zinc-200 bg-white px-5 text-lg text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-red-500 focus:ring-4 focus:ring-red-100"
               />
-
-              <button
-                type="button"
-                onClick={handleGoogleCadastro}
-                disabled={loadingGoogle}
-                className="mt-2 flex h-14 w-full items-center justify-center gap-3 rounded-2xl border border-zinc-200 bg-white text-base font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {loadingGoogle ? "Abrindo Google..." : "Continuar com Google"}
-              </button>
 
               <button
                 type="submit"
